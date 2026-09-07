@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reel Pick — pick tonight's movie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="grain"></div>
+
+<main id="app">
+
+  <!-- LANDING -->
+  <section id="view-landing" class="view">
+    <div class="stage">
+      <h1 class="marquee">Reel Pick</h1>
+      <p class="tagline">Everyone piles in. One movie wins.</p>
+
+      <div class="card auth-card">
+        <label class="field">
+          <span>Your name</span>
+          <input type="text" id="input-name" placeholder="e.g. Cosmin" maxlength="20" autocomplete="off">
+        </label>
+
+        <div class="split">
+          <div class="split-col">
+            <button class="btn btn-primary" id="btn-create-room">Start a room</button>
+          </div>
+          <div class="split-col">
+            <label class="field">
+              <span>Room code</span>
+              <input type="text" id="input-code" placeholder="ABCD" maxlength="6" autocomplete="off">
+            </label>
+            <button class="btn btn-secondary" id="btn-join-room">Join room</button>
+          </div>
+        </div>
+        <p class="error" id="landing-error"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="view-lobby" class="view hidden">
+    <div class="stage">
+      <div class="ticket">
+        <span class="ticket-label">Room code</span>
+        <span class="ticket-code" id="lobby-code">----</span>
+      </div>
+
+      <h2 class="section-title">Who's in</h2>
+      <ul class="member-list" id="member-list"></ul>
+
+      <button class="btn btn-primary btn-large" id="btn-all-in">I'm all in</button>
+      <p class="hint" id="lobby-hint">Waiting for everyone to be all in…</p>
+      <p class="error" id="lobby-error"></p>
+    </div>
+  </section>
+
+  <!-- REVEAL -->
+  <section id="view-reveal" class="view hidden">
+    <div class="stage">
+      <p class="eyebrow-hint" id="reveal-status">Picking tonight's film…</p>
+      <div class="movie-card" id="movie-card">
+        <div class="poster-wrap">
+          <img id="movie-poster" class="poster" alt="">
+        </div>
+        <div class="movie-info">
+          <h2 id="movie-title" class="movie-title"></h2>
+          <p id="movie-meta" class="movie-meta"></p>
+          <p id="movie-overview" class="movie-overview"></p>
+        </div>
+      </div>
+
+      <div class="vote-row" id="vote-row">
+        <button class="btn btn-vote btn-seen" id="btn-seen-it">Seen it</button>
+        <button class="btn btn-vote btn-not-seen" id="btn-not-seen-it">Didn't see it</button>
+      </div>
+      <p class="hint" id="reveal-hint"></p>
+    </div>
+  </section>
+
+  <!-- WINNER -->
+  <section id="view-winner" class="view hidden">
+    <div class="stage">
+      <p class="eyebrow-hint">Tonight's pick</p>
+      <div class="movie-card winner-card" id="winner-card">
+        <div class="poster-wrap">
+          <img id="winner-poster" class="poster" alt="">
+        </div>
+        <div class="movie-info">
+          <h2 id="winner-title" class="movie-title"></h2>
+          <p id="winner-meta" class="movie-meta"></p>
+          <p id="winner-overview" class="movie-overview"></p>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btn-play-again">Pick another movie night</button>
+    </div>
+  </section>
+
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
