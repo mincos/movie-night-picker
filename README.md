@@ -5,7 +5,7 @@ A tiny room-based web app for picking tonight's movie with friends. No build ste
 ## How it works
 
 1. One person **starts a room** and gets a 4-letter code. Others **join** with that code.
-2. Everyone presses **"I'm all in"** once ready.
+2. Everyone presses **"I am in"** once ready.
 3. When everyone's in, the app picks a random popular movie (via TMDB) and shows it to everyone at once.
 4. Each person presses **Seen it** or **Didn't see it**.
    - If anyone's seen it, a new movie is picked automatically (previous picks are excluded).

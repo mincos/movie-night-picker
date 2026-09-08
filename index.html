@@ -44,19 +44,33 @@
     </div>
   </section>
 
+  <!-- GENRES (room starter only) -->
+  <section id="view-genres" class="view hidden">
+    <div class="stage">
+      <h2 class="stage-title">Pick your genres</h2>
+      <p class="eyebrow-hint">Choose 2 or 3 — tonight's picks come from these.</p>
+      <div class="chip-grid" id="genre-grid"></div>
+      <p class="hint" id="genre-count"></p>
+      <button class="btn btn-primary btn-large" id="btn-start-room" disabled>Start the room</button>
+      <button class="btn btn-ghost" id="btn-genres-back">Back</button>
+      <p class="error" id="genre-error"></p>
+    </div>
+  </section>
+
   <!-- LOBBY -->
   <section id="view-lobby" class="view hidden">
     <div class="stage">
       <div class="ticket">
         <span class="ticket-label">Room code</span>
         <span class="ticket-code" id="lobby-code">----</span>
+        <span class="ticket-genres" id="lobby-genres"></span>
       </div>
 
       <h2 class="section-title">Who's in</h2>
       <ul class="member-list" id="member-list"></ul>
 
-      <button class="btn btn-primary btn-large" id="btn-all-in">I'm all in</button>
-      <p class="hint" id="lobby-hint">Waiting for everyone to be all in…</p>
+      <button class="btn btn-primary btn-large" id="btn-all-in">I am in</button>
+      <p class="hint" id="lobby-hint">Waiting for everyone to be in…</p>
       <p class="error" id="lobby-error"></p>
     </div>
   </section>
@@ -89,6 +103,7 @@
     <div class="stage">
       <p class="eyebrow-hint">Tonight's pick</p>
       <div class="movie-card winner-card" id="winner-card">
+        <span class="winner-badge">★ Winner</span>
         <div class="poster-wrap">
           <img id="winner-poster" class="poster" alt="">
         </div>
