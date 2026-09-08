@@ -1,6 +1,6 @@
 // Paste your own Firebase project config here.
 // Get this from: Firebase Console > Project Settings > General > Your apps > SDK setup and config
-const firebaseConfig = {
+export const firebaseConfig = {
     apiKey: "AIzaSyDNHu3jOyZpOWWUVrUXd7wgpfTzBGs3e_I",
     authDomain: "movie-night-picker-4711d.firebaseapp.com",
     projectId: "movie-night-picker-4711d",
