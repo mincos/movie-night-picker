@@ -195,6 +195,19 @@ async function fetchRandomMovie(excludeIds = [], genreIds = []) {
   const pool = data.results.filter(m => !excludeIds.includes(m.id));
   const list = pool.length ? pool : data.results;
   const movie = list[Math.floor(Math.random() * list.length)];
+
+  // runtime only exists on the detail endpoint; a failure here shouldn't
+  // cost us the pick, so the movie just goes out without a duration
+  let runtime = null;
+  try {
+    const res = await fetch(
+      `https://api.themoviedb.org/3/movie/${movie.id}?api_key=${TMDB_API_KEY}&language=en-US`
+    );
+    if (res.ok) runtime = (await res.json()).runtime || null;
+  } catch (e) {
+    console.error(e);
+  }
+
   return {
     id: movie.id,
     title: movie.title,
@@ -202,6 +215,7 @@ async function fetchRandomMovie(excludeIds = [], genreIds = []) {
     poster_path: movie.poster_path,
     release_date: movie.release_date || '',
     vote_average: movie.vote_average || 0,
+    runtime,
   };
 }
 
@@ -351,14 +365,26 @@ function renderRoom(room) {
   lastPhase = room.phase;
 }
 
+function formatRuntime(mins) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (!h) return `${m}m`;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
 function renderMovieInto(movie, targets) {
   targets.poster.src = movie.poster_path
     ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
     : '';
   targets.poster.alt = movie.title;
   targets.title.textContent = movie.title;
+
   const year = movie.release_date ? movie.release_date.slice(0, 4) : '—';
-  targets.meta.textContent = `${year} · ★ ${movie.vote_average.toFixed(1)}`;
+  const parts = [year, `★ ${movie.vote_average.toFixed(1)}`];
+  // rooms picked before runtime was stored simply have no duration
+  if (movie.runtime) parts.push(formatRuntime(movie.runtime));
+  targets.meta.textContent = parts.join(' · ');
+
   targets.overview.textContent = movie.overview;
 }
 

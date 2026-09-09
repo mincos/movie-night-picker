@@ -41,7 +41,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px 20px 40px;
+  padding: 20px 20px 28px;
 }
 
 .view.hidden { display: none; }
@@ -237,7 +237,7 @@ input[type="text"]::placeholder {
 }
 
 /* make room for the bar only when it's actually up */
-body.with-room-bar #app { padding-top: 50px; }
+body.with-room-bar #app { padding-top: 46px; }
 
 /* ---- Genre picker ---- */
 
@@ -442,8 +442,8 @@ body.with-room-bar #app { padding-top: 50px; }
 }
 
 .btn-vote { color: var(--navy-deep); }
-.btn-seen { background: rgba(193,68,60,0.85); color: var(--cream); }
-.btn-seen:hover:not(:disabled) { background: var(--red); }
+.btn-seen { background: rgb(232 112 78); color: var(--cream); }
+.btn-seen:hover:not(:disabled) { background: rgb(240 132 100); }
 .btn-not-seen { background: var(--green); color: var(--cream); }
 .btn-not-seen:hover:not(:disabled) { background: #6ba181; }
 
@@ -460,20 +460,28 @@ body.with-room-bar #app { padding-top: 50px; }
 
 #view-winner .poster-wrap {
   position: relative;
-  width: 52%;
-  max-width: 190px;
-  margin: 18px auto 0;
+  width: auto;
+  max-width: none;
+  height: clamp(160px, 36dvh, 500px);
+  margin: 14px auto 0;
   aspect-ratio: 2 / 3;
   border-radius: 8px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
 #view-winner .movie-info {
-  padding: 16px 20px 20px;
+  padding: 12px 20px 16px;
   text-align: center;
 }
 
-#view-winner .movie-title { font-size: 1.35rem; }
+#view-winner .movie-title {
+  font-size: 1.2rem;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
 #view-winner .movie-meta { margin-bottom: 10px; }
 
 #view-winner .movie-overview {
@@ -483,6 +491,7 @@ body.with-room-bar #app { padding-top: 50px; }
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 5;
   line-clamp: 5;
+  min-height: calc(5 * 1.5em);
   overflow: hidden;
 }
 
@@ -551,25 +560,33 @@ body.with-room-bar #app { padding-top: 50px; }
 
 /* ---- Reveal: vertical card, trimmed so the vote buttons stay above the fold ---- */
 
-#view-reveal .eyebrow-hint { margin-bottom: 12px; }
+#view-reveal .eyebrow-hint { margin-bottom: 10px; }
 #view-reveal .movie-card { margin-bottom: 16px; }
 
 /* poster keeps its 2:3 shape but no longer spans the full card width */
 #view-reveal .poster-wrap {
-  width: 46%;
-  max-width: 168px;
-  margin: 16px auto 0;
+  width: auto;
+  max-width: none;
+  height: clamp(150px, 33dvh, 460px);
+  margin: 12px auto 0;
   aspect-ratio: 2 / 3;
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.45);
 }
 
 #view-reveal .movie-info {
-  padding: 16px 20px 20px;
+  padding: 12px 20px 16px;
   text-align: center;
 }
 
-#view-reveal .movie-title { font-size: 1.25rem; }
+#view-reveal .movie-title {
+  font-size: 1.15rem;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
 #view-reveal .movie-meta { margin-bottom: 10px; }
 
 #view-reveal .movie-overview {
@@ -579,6 +596,9 @@ body.with-room-bar #app { padding-top: 50px; }
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 5;
   line-clamp: 5;
+  /* reserve the clamped height so a short synopsis doesn't shrink the card
+     and hand the space back as a gap */
+  min-height: calc(5 * 1.5em);
   overflow: hidden;
 }
 
@@ -586,53 +606,75 @@ body.with-room-bar #app { padding-top: 50px; }
   .split { grid-template-columns: 1fr; }
 }
 
-/* Short viewports: trim further rather than pushing the buttons down */
-@media (max-height: 780px) {
-  #app { padding: 20px 20px 28px; }
+/* Poster height and synopsis length step together with viewport height, so the
+   card fills the screen at every size instead of stranding space below the
+   buttons. Line count rises with the room available; the poster fraction rises
+   with it so tall phones don't leave a gap. */
 
-  /* Phones: size the poster off viewport height so the card grows to fill the
-     screen instead of floating in dead space, which also buys synopsis lines. */
-  #view-reveal .eyebrow-hint { margin-bottom: 10px; }
-  #view-reveal .poster-wrap {
-    width: auto;
-    max-width: none;
-    height: clamp(170px, 34dvh, 270px);
-    margin-top: 12px;
-  }
-  #view-reveal .movie-info { padding: 12px 16px 16px; }
-  #view-reveal .movie-title { font-size: 1.15rem; }
-  #view-reveal .movie-overview { -webkit-line-clamp: 4; line-clamp: 4; }
-  #view-reveal .hint { margin-top: 10px; }
-
-  body.with-room-bar #app { padding-top: 46px; }
-  #view-winner .eyebrow-hint { margin-bottom: 10px; }
-  #view-winner .poster-wrap {
-    width: auto;
-    max-width: none;
-    height: clamp(180px, 37dvh, 292px);
-    margin-top: 14px;
-  }
-  #view-winner .movie-info { padding: 12px 16px 16px; }
-  #view-winner .movie-title { font-size: 1.2rem; }
-  #view-winner .movie-overview { -webkit-line-clamp: 4; line-clamp: 4; }
-}
-
-/* Tall phones: spend the extra height on another synopsis line */
-@media (min-height: 701px) and (max-height: 780px) {
-  #view-reveal .movie-overview,
-  #view-winner .movie-overview { -webkit-line-clamp: 5; line-clamp: 5; }
-}
-
-/* Small phones: give a line back so the taller poster still fits */
-@media (max-height: 650px) {
-  #view-reveal .movie-overview,
-  #view-winner .movie-overview { -webkit-line-clamp: 3; line-clamp: 3; }
-}
-
-/* Very small phones (SE-sized): tightest text and a smaller poster */
 @media (max-height: 600px) {
-  #view-reveal .poster-wrap { height: clamp(140px, 30dvh, 200px); }
-  #view-winner .poster-wrap { height: clamp(150px, 33dvh, 215px); }
+  #view-reveal .poster-wrap { height: clamp(120px, 26dvh, 175px); }
+  #view-winner .poster-wrap { height: clamp(130px, 29dvh, 190px); }
   #view-reveal .movie-overview,
-  #view-winner .movie-overview { -webkit-line-clamp: 2; line-clamp: 2; }
+  #view-winner .movie-overview {
+    -webkit-line-clamp: 2; line-clamp: 2;
+    min-height: calc(2 * 1.5em);
+  }
+}
+
+@media (min-height: 601px) and (max-height: 650px) {
+  #view-reveal .movie-overview,
+  #view-winner .movie-overview {
+    -webkit-line-clamp: 3; line-clamp: 3;
+    min-height: calc(3 * 1.5em);
+  }
+}
+
+@media (min-height: 651px) and (max-height: 700px) {
+  #view-reveal .movie-overview,
+  #view-winner .movie-overview {
+    -webkit-line-clamp: 4; line-clamp: 4;
+    min-height: calc(4 * 1.5em);
+  }
+}
+
+@media (min-height: 701px) and (max-height: 740px) {
+  #view-reveal .poster-wrap { height: 35dvh; }
+  #view-winner .poster-wrap { height: 38dvh; }
+  #view-reveal .movie-overview,
+  #view-winner .movie-overview {
+    -webkit-line-clamp: 5; line-clamp: 5;
+    min-height: calc(5 * 1.5em);
+  }
+}
+
+@media (min-height: 741px) and (max-height: 800px) {
+  #view-reveal .poster-wrap { height: 37dvh; }
+  #view-winner .poster-wrap { height: 40dvh; }
+  #view-reveal .movie-overview,
+  #view-winner .movie-overview {
+    -webkit-line-clamp: 6; line-clamp: 6;
+    min-height: calc(6 * 1.5em);
+  }
+}
+
+@media (min-height: 801px) and (max-height: 880px) {
+  #view-reveal .poster-wrap { height: 40dvh; }
+  #view-winner .poster-wrap { height: 43dvh; }
+  #view-reveal .movie-overview,
+  #view-winner .movie-overview {
+    -webkit-line-clamp: 7; line-clamp: 7;
+    min-height: calc(7 * 1.5em);
+  }
+}
+
+@media (min-height: 881px) {
+  #view-reveal .poster-wrap { height: 42dvh; }
+  #view-winner .poster-wrap { height: 45dvh; }
+  #view-reveal .movie-overview,
+  #view-winner .movie-overview {
+    -webkit-line-clamp: 8; line-clamp: 8;
+    min-height: calc(8 * 1.5em);
+  }
+}
+
 }
