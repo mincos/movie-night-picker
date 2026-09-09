@@ -11,6 +11,8 @@ const db = getFirestore(app);
 
 // ---------- local identity ----------
 const MEMBER_KEY = 'reelpick_member_id';
+const ROOM_KEY = 'reelpick_room';
+const NAME_KEY = 'reelpick_name';
 let memberId = localStorage.getItem(MEMBER_KEY);
 if (!memberId) {
   memberId = 'm_' + Math.random().toString(36).slice(2, 10);
@@ -27,15 +29,21 @@ const roomExpiry = () =>
 // silent past AWAY_MS stops counting toward "everyone's in" / "everyone voted".
 // Tab-close events are too unreliable to use (and fire on nothing at all when a
 // phone kills the app), so absence is measured rather than announced.
-const HEARTBEAT_MS = 10000;
-const AWAY_MS = 35000;
+const HEARTBEAT_MS = 3000;
+const AWAY_MS = 10000;
 let heartbeatTimer = null;
 let settleTimer = null;
 let lastRoom = null;
 
-const isPresent = m =>
-  !!m && typeof m.lastSeen === 'number' && (Date.now() - m.lastSeen) < AWAY_MS;
-const presentMembers = room => Object.values(room.members || {}).filter(isPresent);
+// We always count ourselves: acting in the room *is* proof of presence, and our
+// own lastSeen can lag (the page was hidden, or just reloaded), which would
+// otherwise let a client filter away its own vote.
+const isPresent = (id, m) =>
+  id === memberId ||
+  (!!m && typeof m.lastSeen === 'number' && (Date.now() - m.lastSeen) < AWAY_MS);
+const presentEntries = room =>
+  Object.entries(room.members || {}).filter(([id, m]) => isPresent(id, m));
+const presentMembers = room => presentEntries(room).map(([, m]) => m);
 
 let roomCode = null;
 let memberName = null;
@@ -286,7 +294,9 @@ async function joinRoom() {
 function showLandingError(msg) { el.landingError.textContent = msg; }
 
 async function sendHeartbeat() {
-  if (!roomCode) return;
+  // a hidden tab isn't watching anything — don't spend quota (or hold the room
+  // alive via expiresAt) for a phone that's been locked or a forgotten tab
+  if (!roomCode || document.hidden) return;
   try {
     await updateDoc(roomRef(roomCode), {
       [`members.${memberId}.lastSeen`]: Date.now(),
@@ -303,17 +313,20 @@ function startPresence() {
   sendHeartbeat();
   clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_MS);
+  // note: browsers throttle (or suspend) timers in hidden tabs anyway, but the
+  // guard in sendHeartbeat is what actually stops the writes
 
   // Going quiet produces no snapshot, so a room already waiting only on absent
   // players would sit there forever. Poll for that, but only when it can apply.
   clearInterval(settleTimer);
   settleTimer = setInterval(() => {
-    if (!roomCode || !lastRoom) return;
+    if (!roomCode || !lastRoom || document.hidden) return;
     renderRoom(lastRoom); // refresh Away labels without waiting for a write
 
     if (lastRoom.phase !== 'reveal' || !lastRoom.currentMovie) return;
     const all = Object.values(lastRoom.members || {});
-    const here = all.filter(isPresent);
+    const here = Object.entries(lastRoom.members || {})
+      .filter(([id, m]) => isPresent(id, m)).map(([, m]) => m);
     // nobody absent -> the voter's own transaction settles it; don't poll
     if (!here.length || here.length === all.length) return;
 
@@ -322,20 +335,76 @@ function startPresence() {
     if (here.some(m => votedOnThis(m) && m.vote === 'seen') || here.every(votedOnThis)) {
       settleReveal();
     }
-  }, 5000);
+  }, 2000);
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) sendHeartbeat();
+  if (!document.hidden) sendHeartbeat(); // back on screen: re-announce at once
 });
+
+function rememberSession(code, name) {
+  try {
+    localStorage.setItem(ROOM_KEY, code);
+    if (name) localStorage.setItem(NAME_KEY, name);
+  } catch (e) { /* private mode — resume just won't work */ }
+}
+
+function forgetSession() {
+  try { localStorage.removeItem(ROOM_KEY); } catch (e) { /* ignore */ }
+}
+
+// iOS discards backgrounded pages, and reopening the tab would otherwise dump
+// you on the start screen instead of the room you were in.
+async function resumeSession() {
+  let code = null;
+  let savedName = null;
+  try {
+    code = localStorage.getItem(ROOM_KEY);
+    savedName = localStorage.getItem(NAME_KEY);
+  } catch (e) {
+    return;
+  }
+  if (savedName) el.name.value = savedName;
+  if (!code) return;
+
+  try {
+    const snap = await getDoc(roomRef(code));
+    if (!snap.exists()) return forgetSession(); // expired or swept by the TTL
+    const room = snap.data();
+    memberName = savedName || 'Guest';
+
+    // gone long enough to have fallen out of the members map — rejoin rather
+    // than render a room we aren't in
+    if (!(room.members || {})[memberId]) {
+      await updateDoc(roomRef(code), {
+        [`members.${memberId}`]: { name: memberName, allIn: false, vote: null, voteFor: null,
+          joinedAt: Date.now(), lastSeen: Date.now() }
+      });
+    }
+    enterRoom(code);
+  } catch (e) {
+    console.error(e);
+    forgetSession();
+  }
+}
 
 function enterRoom(code) {
   roomCode = code;
+  rememberSession(code, memberName);
   el.landingError.textContent = '';
   el.lobbyCode.textContent = code;
   if (unsubscribe) unsubscribe();
   unsubscribe = onSnapshot(roomRef(code), (snap) => {
-    if (!snap.exists()) return;
+    if (!snap.exists()) {
+      // the room expired while we had it open
+      forgetSession();
+      if (unsubscribe) unsubscribe();
+      unsubscribe = null;
+      roomCode = null;
+      showView('landing');
+      showLandingError('That room has expired.');
+      return;
+    }
     renderRoom(snap.data());
   });
   startPresence();
@@ -370,7 +439,7 @@ function renderRoom(room) {
     el.memberList.innerHTML = '';
     memberEntries.forEach(([id, m]) => {
       const li = document.createElement('li');
-      const status = !isPresent(m)
+      const status = !isPresent(id, m)
         ? '<span class="member-status is-away">Away</span>'
         : (m.allIn
             ? `<span class="member-status is-in" role="img" aria-label="In">${CHECK_ICON}</span>`
@@ -387,7 +456,7 @@ function renderRoom(room) {
 
     // whoever notices everyone is in tries to claim the pick
     // someone who closed the app must not hold the room hostage
-    const here = memberEntries.filter(([, m]) => isPresent(m));
+    const here = memberEntries.filter(([id, m]) => isPresent(id, m));
     const allReady = here.length > 0 && here.every(([, m]) => m.allIn);
     if (allReady) tryClaimPick();
   }
@@ -407,7 +476,7 @@ function renderRoom(room) {
     const voted = me && votedOnThis(me);
     el.btnSeen.disabled = !!voted;
     el.btnNotSeen.disabled = !!voted;
-    const here = memberEntries.filter(([, m]) => isPresent(m));
+    const here = memberEntries.filter(([id, m]) => isPresent(id, m));
     const votedCount = here.filter(([, m]) => votedOnThis(m)).length;
     el.revealHint.textContent = voted
       ? `Waiting on others… (${votedCount}/${here.length} voted)`
@@ -464,7 +533,8 @@ function escapeHtml(str) {
 // ---------- actions ----------
 async function markAllIn() {
   await updateDoc(roomRef(roomCode), {
-    [`members.${memberId}.allIn`]: true
+    [`members.${memberId}.allIn`]: true,
+    [`members.${memberId}.lastSeen`]: Date.now(),
   });
 }
 
@@ -557,12 +627,14 @@ async function castVote(vote) {
       if (me.vote && me.voteFor === votedOn) return; // already voted on this one
 
       members[memberId] = { ...me, vote, voteFor: votedOn };
-      const values = Object.values(members).filter(isPresent);
+      const values = Object.entries(members)
+        .filter(([id, m]) => isPresent(id, m)).map(([, m]) => m);
       const votedOnThis = m => m.vote && m.voteFor === votedOn;
 
       const update = {
         [`members.${memberId}.vote`]: vote,
         [`members.${memberId}.voteFor`]: votedOn,
+        [`members.${memberId}.lastSeen`]: Date.now(),
       };
 
       if (values.some(m => votedOnThis(m) && m.vote === 'seen')) {
@@ -669,3 +741,4 @@ el.code.addEventListener('keydown', (e) => {
 });
 
 buildGenreGrid();
+resumeSession();
