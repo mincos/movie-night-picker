@@ -23,6 +23,20 @@ const ROOM_TTL_HOURS = 1;
 const roomExpiry = () =>
   Timestamp.fromMillis(Date.now() + ROOM_TTL_HOURS * 60 * 60 * 1000);
 
+// Presence by inference: each client writes lastSeen on a timer, and anyone
+// silent past AWAY_MS stops counting toward "everyone's in" / "everyone voted".
+// Tab-close events are too unreliable to use (and fire on nothing at all when a
+// phone kills the app), so absence is measured rather than announced.
+const HEARTBEAT_MS = 10000;
+const AWAY_MS = 35000;
+let heartbeatTimer = null;
+let settleTimer = null;
+let lastRoom = null;
+
+const isPresent = m =>
+  !!m && typeof m.lastSeen === 'number' && (Date.now() - m.lastSeen) < AWAY_MS;
+const presentMembers = room => Object.values(room.members || {}).filter(isPresent);
+
 let roomCode = null;
 let memberName = null;
 let unsubscribe = null;
@@ -244,7 +258,8 @@ async function createRoom() {
     excludedMovieIds: [],
     genres: [...selectedGenres],
     members: {
-      [memberId]: { name: memberName, allIn: false, vote: null, voteFor: null, joinedAt: Date.now() }
+      [memberId]: { name: memberName, allIn: false, vote: null, voteFor: null,
+        joinedAt: Date.now(), lastSeen: Date.now() }
     }
   });
 
@@ -261,13 +276,55 @@ async function joinRoom() {
   if (!snap.exists()) return showLandingError('No room with that code.');
 
   await updateDoc(roomRef(code), {
-    [`members.${memberId}`]: { name: memberName, allIn: false, vote: null, voteFor: null, joinedAt: Date.now() }
+    [`members.${memberId}`]: { name: memberName, allIn: false, vote: null, voteFor: null,
+      joinedAt: Date.now(), lastSeen: Date.now() }
   });
 
   enterRoom(code);
 }
 
 function showLandingError(msg) { el.landingError.textContent = msg; }
+
+async function sendHeartbeat() {
+  if (!roomCode) return;
+  try {
+    await updateDoc(roomRef(roomCode), {
+      [`members.${memberId}.lastSeen`]: Date.now(),
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function startPresence() {
+  sendHeartbeat();
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_MS);
+
+  // Going quiet produces no snapshot, so a room already waiting only on absent
+  // players would sit there forever. Poll for that, but only when it can apply.
+  clearInterval(settleTimer);
+  settleTimer = setInterval(() => {
+    if (!roomCode || !lastRoom) return;
+    renderRoom(lastRoom); // refresh Away labels without waiting for a write
+
+    if (lastRoom.phase !== 'reveal' || !lastRoom.currentMovie) return;
+    const all = Object.values(lastRoom.members || {});
+    const here = all.filter(isPresent);
+    // nobody absent -> the voter's own transaction settles it; don't poll
+    if (!here.length || here.length === all.length) return;
+
+    const movieId = lastRoom.currentMovie.id;
+    const votedOnThis = m => m.vote && m.voteFor === movieId;
+    if (here.some(m => votedOnThis(m) && m.vote === 'seen') || here.every(votedOnThis)) {
+      settleReveal();
+    }
+  }, 5000);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) sendHeartbeat();
+});
 
 function enterRoom(code) {
   roomCode = code;
@@ -278,6 +335,7 @@ function enterRoom(code) {
     if (!snap.exists()) return;
     renderRoom(snap.data());
   });
+  startPresence();
 }
 
 // ---------- rendering ----------
@@ -289,6 +347,7 @@ const CHECK_ICON =
   'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 function renderRoom(room) {
+  lastRoom = room;
   const members = room.members || {};
   const memberEntries = Object.entries(members);
 
@@ -308,9 +367,11 @@ function renderRoom(room) {
     el.memberList.innerHTML = '';
     memberEntries.forEach(([id, m]) => {
       const li = document.createElement('li');
-      const status = m.allIn
-        ? `<span class="member-status is-in" role="img" aria-label="In">${CHECK_ICON}</span>`
-        : '<span class="member-status">Waiting</span>';
+      const status = !isPresent(m)
+        ? '<span class="member-status is-away">Away</span>'
+        : (m.allIn
+            ? `<span class="member-status is-in" role="img" aria-label="In">${CHECK_ICON}</span>`
+            : '<span class="member-status">Waiting</span>');
       li.innerHTML = `<span>${escapeHtml(m.name)}${id === memberId ? ' (you)' : ''}</span>${status}`;
       el.memberList.appendChild(li);
     });
@@ -322,7 +383,9 @@ function renderRoom(room) {
     el.lobbyHint.textContent = 'Waiting for everyone to be in…';
 
     // whoever notices everyone is in tries to claim the pick
-    const allReady = memberEntries.length > 0 && memberEntries.every(([, m]) => m.allIn);
+    // someone who closed the app must not hold the room hostage
+    const here = memberEntries.filter(([, m]) => isPresent(m));
+    const allReady = here.length > 0 && here.every(([, m]) => m.allIn);
     if (allReady) tryClaimPick();
   }
 
@@ -341,9 +404,10 @@ function renderRoom(room) {
     const voted = me && votedOnThis(me);
     el.btnSeen.disabled = !!voted;
     el.btnNotSeen.disabled = !!voted;
-    const votedCount = memberEntries.filter(([, m]) => votedOnThis(m)).length;
+    const here = memberEntries.filter(([, m]) => isPresent(m));
+    const votedCount = here.filter(([, m]) => votedOnThis(m)).length;
     el.revealHint.textContent = voted
-      ? `Waiting on others… (${votedCount}/${memberEntries.length} voted)`
+      ? `Waiting on others… (${votedCount}/${here.length} voted)`
       : 'Wanna watch this one?';
   }
 
@@ -413,8 +477,8 @@ async function tryClaimPick() {
       const room = snap.data();
       if (!room || room.phase !== 'lobby') return;
       const members = room.members || {};
-      const allReady = Object.values(members).length > 0 &&
-        Object.values(members).every(m => m.allIn);
+      const here = presentMembers(room);
+      const allReady = here.length > 0 && here.every(m => m.allIn);
       if (!allReady) return;
       tx.update(roomRef(roomCode), { phase: 'picking' });
       shouldPick = true;
@@ -490,7 +554,7 @@ async function castVote(vote) {
       if (me.vote && me.voteFor === votedOn) return; // already voted on this one
 
       members[memberId] = { ...me, vote, voteFor: votedOn };
-      const values = Object.values(members);
+      const values = Object.values(members).filter(isPresent);
       const votedOnThis = m => m.vote && m.voteFor === votedOn;
 
       const update = {
@@ -511,6 +575,36 @@ async function castVote(vote) {
     console.error(e);
   }
 
+  if (shouldPick) await pickAndRevealMovie();
+}
+
+// Finishes a reveal that the remaining players have already settled — needed
+// because a player going quiet generates no snapshot to react to.
+async function settleReveal() {
+  let shouldPick = false;
+  try {
+    await runTransaction(db, async (tx) => {
+      shouldPick = false;
+      const ref = roomRef(roomCode);
+      const snap = await tx.get(ref);
+      const room = snap.data();
+      if (!room || room.phase !== 'reveal' || !room.currentMovie) return;
+
+      const movieId = room.currentMovie.id;
+      const here = presentMembers(room);
+      if (!here.length) return;
+      const votedOnThis = m => m.vote && m.voteFor === movieId;
+
+      if (here.some(m => votedOnThis(m) && m.vote === 'seen')) {
+        tx.update(ref, { phase: 'picking' });
+        shouldPick = true;
+      } else if (here.every(votedOnThis)) {
+        tx.update(ref, { phase: 'winner' });
+      }
+    });
+  } catch (e) {
+    console.error(e);
+  }
   if (shouldPick) await pickAndRevealMovie();
 }
 

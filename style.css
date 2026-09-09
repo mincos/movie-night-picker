@@ -338,6 +338,11 @@ body.with-room-bar #app { padding-top: 46px; }
   color: rgba(243,236,221,0.4);
 }
 
+.member-status.is-away {
+  color: rgba(243, 236, 221, 0.3);
+  font-style: italic;
+}
+
 .member-status.is-in {
   color: var(--green);
   font-weight: 600;
@@ -442,8 +447,8 @@ body.with-room-bar #app { padding-top: 46px; }
 }
 
 .btn-vote { color: var(--navy-deep); }
-.btn-seen { background: rgb(232 112 78); color: var(--cream); }
-.btn-seen:hover:not(:disabled) { background: rgb(240 132 100); }
+.btn-seen { background: rgba(193,68,60,0.85); color: var(--cream); }
+.btn-seen:hover:not(:disabled) { background: var(--red); }
 .btn-not-seen { background: var(--green); color: var(--cream); }
 .btn-not-seen:hover:not(:disabled) { background: #6ba181; }
 
