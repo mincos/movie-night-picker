@@ -13,6 +13,12 @@
 
 <div class="grain"></div>
 
+<div class="room-bar" id="room-bar" hidden>
+  <span class="room-bar-label">Room</span>
+  <span class="room-bar-code" id="room-bar-code"></span>
+  <span class="room-bar-hint">join anytime</span>
+</div>
+
 <main id="app">
 
   <!-- LANDING -->
@@ -75,6 +81,15 @@
     </div>
   </section>
 
+  <!-- PICKING (loader) -->
+  <section id="view-picking" class="view hidden">
+    <div class="stage">
+      <div class="spinner" role="status" aria-live="polite" aria-label="Picking a movie"></div>
+      <p class="picking-text" id="picking-text">Picking a movie…</p>
+      <p class="error" id="picking-error"></p>
+    </div>
+  </section>
+
   <!-- REVEAL -->
   <section id="view-reveal" class="view hidden">
     <div class="stage">
@@ -91,8 +106,8 @@
       </div>
 
       <div class="vote-row" id="vote-row">
-        <button class="btn btn-vote btn-seen" id="btn-seen-it">Seen it</button>
-        <button class="btn btn-vote btn-not-seen" id="btn-not-seen-it">Didn't see it</button>
+        <button class="btn btn-vote btn-seen" id="btn-seen-it">Neah</button>
+        <button class="btn btn-vote btn-not-seen" id="btn-not-seen-it">Wanna see it</button>
       </div>
       <p class="hint" id="reveal-hint"></p>
     </div>
@@ -103,8 +118,8 @@
     <div class="stage">
       <p class="eyebrow-hint">Tonight's pick</p>
       <div class="movie-card winner-card" id="winner-card">
-        <span class="winner-badge">★ Winner</span>
         <div class="poster-wrap">
+          <span class="winner-badge">★ Winner</span>
           <img id="winner-poster" class="poster" alt="">
         </div>
         <div class="movie-info">

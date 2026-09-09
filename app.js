@@ -3,7 +3,7 @@ import { celebrate } from './confetti.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot,
-  runTransaction, serverTimestamp, deleteField
+  runTransaction, serverTimestamp, deleteField, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 const app = initializeApp(firebaseConfig);
@@ -21,12 +21,14 @@ let roomCode = null;
 let memberName = null;
 let unsubscribe = null;
 let lastPhase = null;
+let shownMovieId = null;
 
 // ---------- elements ----------
 const views = {
   landing: document.getElementById('view-landing'),
   genres: document.getElementById('view-genres'),
   lobby: document.getElementById('view-lobby'),
+  picking: document.getElementById('view-picking'),
   reveal: document.getElementById('view-reveal'),
   winner: document.getElementById('view-winner'),
 };
@@ -34,9 +36,18 @@ const views = {
 function showView(name) {
   Object.values(views).forEach(v => v.classList.add('hidden'));
   views[name].classList.remove('hidden');
+
+  // the lobby already shows the code on its ticket; these screens didn't
+  const showBar = (name === 'picking' || name === 'reveal' || name === 'winner') && !!roomCode;
+  el.roomBar.hidden = !showBar;
+  document.body.classList.toggle('with-room-bar', showBar);
+  if (showBar) el.roomBarCode.textContent = roomCode;
 }
 
 const el = {
+  roomBar: document.getElementById('room-bar'),
+  roomBarCode: document.getElementById('room-bar-code'),
+
   name: document.getElementById('input-name'),
   code: document.getElementById('input-code'),
   btnCreate: document.getElementById('btn-create-room'),
@@ -55,6 +66,9 @@ const el = {
   btnAllIn: document.getElementById('btn-all-in'),
   lobbyHint: document.getElementById('lobby-hint'),
   lobbyError: document.getElementById('lobby-error'),
+
+  pickingText: document.getElementById('picking-text'),
+  pickingError: document.getElementById('picking-error'),
 
   revealStatus: document.getElementById('reveal-status'),
   movieCard: document.getElementById('movie-card'),
@@ -209,7 +223,7 @@ async function createRoom() {
     excludedMovieIds: [],
     genres: [...selectedGenres],
     members: {
-      [memberId]: { name: memberName, allIn: false, vote: null, joinedAt: Date.now() }
+      [memberId]: { name: memberName, allIn: false, vote: null, voteFor: null, joinedAt: Date.now() }
     }
   });
 
@@ -226,7 +240,7 @@ async function joinRoom() {
   if (!snap.exists()) return showLandingError('No room with that code.');
 
   await updateDoc(roomRef(code), {
-    [`members.${memberId}`]: { name: memberName, allIn: false, vote: null, joinedAt: Date.now() }
+    [`members.${memberId}`]: { name: memberName, allIn: false, vote: null, voteFor: null, joinedAt: Date.now() }
   });
 
   enterRoom(code);
@@ -257,7 +271,16 @@ function renderRoom(room) {
   const members = room.members || {};
   const memberEntries = Object.entries(members);
 
-  if (room.phase === 'lobby' || room.phase === 'picking') {
+  if (room.phase === 'picking') {
+    showView('picking');
+    // a re-pick already has a movie on the room; the first pick doesn't
+    el.pickingText.textContent = room.currentMovie
+      ? "Here's another one…"
+      : 'Picking tonight\'s film…';
+    el.pickingError.textContent = '';
+  }
+
+  if (room.phase === 'lobby') {
     showView('lobby');
     const names = genreNames(room.genres || []);
     el.lobbyGenres.textContent = names.length ? names.join(' · ') : '';
@@ -273,19 +296,13 @@ function renderRoom(room) {
 
     const me = members[memberId];
     const allIn = me && me.allIn;
-    el.btnAllIn.disabled = !!allIn || room.phase === 'picking';
-    el.btnAllIn.textContent = room.phase === 'picking'
-      ? 'Picking a movie…'
-      : (allIn ? "You're in ✓" : "I am in");
-    el.lobbyHint.textContent = room.phase === 'picking'
-      ? 'Everyone is in — grabbing tonight\'s film…'
-      : 'Waiting for everyone to be in…';
+    el.btnAllIn.disabled = !!allIn;
+    el.btnAllIn.textContent = allIn ? "You're in ✓" : "I am in";
+    el.lobbyHint.textContent = 'Waiting for everyone to be in…';
 
-    // whoever notices everyone is in AND phase still lobby, tries to claim the pick
+    // whoever notices everyone is in tries to claim the pick
     const allReady = memberEntries.length > 0 && memberEntries.every(([, m]) => m.allIn);
-    if (allReady && room.phase === 'lobby') {
-      tryClaimPick();
-    }
+    if (allReady) tryClaimPick();
   }
 
   if (room.phase === 'reveal' && room.currentMovie) {
@@ -297,14 +314,16 @@ function renderRoom(room) {
       meta: el.movieMeta, overview: el.movieOverview
     });
 
+    shownMovieId = movie.id;
     const me = members[memberId];
-    const voted = me && me.vote;
+    const votedOnThis = m => m.vote && m.voteFor === movie.id;
+    const voted = me && votedOnThis(me);
     el.btnSeen.disabled = !!voted;
     el.btnNotSeen.disabled = !!voted;
-    const votedCount = memberEntries.filter(([, m]) => m.vote).length;
+    const votedCount = memberEntries.filter(([, m]) => votedOnThis(m)).length;
     el.revealHint.textContent = voted
       ? `Waiting on others… (${votedCount}/${memberEntries.length} voted)`
-      : 'Have you seen this one?';
+      : 'Wanna watch this one?';
   }
 
   if (room.phase === 'winner' && room.currentMovie) {
@@ -354,6 +373,9 @@ async function tryClaimPick() {
   let shouldPick = false;
   try {
     await runTransaction(db, async (tx) => {
+      // Firestore re-runs this callback on contention. Without resetting here,
+      // a losing attempt keeps the flag from an earlier one and picks anyway.
+      shouldPick = false;
       const snap = await tx.get(roomRef(roomCode));
       const room = snap.data();
       if (!room || room.phase !== 'lobby') return;
@@ -371,75 +393,91 @@ async function tryClaimPick() {
 }
 
 async function pickAndRevealMovie() {
+  let members = {};
   try {
     const snap = await getDoc(roomRef(roomCode));
     const room = snap.data();
+    members = room.members || {};
     const excluded = room.excludedMovieIds || [];
     const movie = await fetchRandomMovie(excluded, room.genres || []);
 
-    const members = room.members || {};
     const resetVotes = {};
-    Object.keys(members).forEach(id => { resetVotes[`members.${id}.vote`] = null; });
+    Object.keys(members).forEach(id => {
+      resetVotes[`members.${id}.vote`] = null;
+      resetVotes[`members.${id}.voteFor`] = null;
+    });
 
     await updateDoc(roomRef(roomCode), {
       phase: 'reveal',
       currentMovie: movie,
-      excludedMovieIds: [...excluded, movie.id],
+      excludedMovieIds: arrayUnion(movie.id),
       ...resetVotes
     });
   } catch (e) {
     console.error(e);
-    el.revealStatus.textContent = 'Could not fetch a movie. Check your TMDB API key.';
+    el.pickingError.textContent = e.message;
+    // don't leave the room stranded on the loader — hand it back to the lobby
+    const reset = {};
+    Object.keys(members).forEach(id => {
+      reset[`members.${id}.allIn`] = false;
+      reset[`members.${id}.vote`] = null;
+      reset[`members.${id}.voteFor`] = null;
+    });
+    try {
+      await updateDoc(roomRef(roomCode), { phase: 'lobby', ...reset });
+      el.lobbyError.textContent = 'Could not fetch a movie — try again.';
+    } catch (_) { /* nothing more we can do from here */ }
   }
 }
 
+// One transaction records the vote AND decides what happens next.
+// Doing it in two steps let a second "Neah" land after the re-pick had already
+// cleared the votes, which made it count against the *new* movie and skip it.
 async function castVote(vote) {
-  await updateDoc(roomRef(roomCode), {
-    [`members.${memberId}.vote`]: vote
-  });
+  const votedOn = shownMovieId;
+  if (votedOn == null) return;
 
-  if (vote === 'seen') {
-    // immediately try to move on to a new movie
-    await tryClaimNextPick();
-  } else {
-    await tryClaimWinner();
-  }
-}
-
-async function tryClaimNextPick() {
   let shouldPick = false;
   try {
     await runTransaction(db, async (tx) => {
-      const snap = await tx.get(roomRef(roomCode));
+      shouldPick = false; // reset per attempt — see tryClaimPick
+      const ref = roomRef(roomCode);
+      const snap = await tx.get(ref);
       const room = snap.data();
-      if (!room || room.phase !== 'reveal') return;
-      const members = room.members || {};
-      const anySeen = Object.values(members).some(m => m.vote === 'seen');
-      if (!anySeen) return;
-      tx.update(roomRef(roomCode), { phase: 'picking' });
-      shouldPick = true;
-    });
-  } catch (e) {
-    console.error(e);
-  }
-  if (shouldPick) await pickAndRevealMovie();
-}
+      if (!room || room.phase !== 'reveal' || !room.currentMovie) return;
 
-async function tryClaimWinner() {
-  try {
-    await runTransaction(db, async (tx) => {
-      const snap = await tx.get(roomRef(roomCode));
-      const room = snap.data();
-      if (!room || room.phase !== 'reveal') return;
-      const members = room.members || {};
+      // the movie moved on between the click and this write — drop the vote
+      // rather than applying it to something the voter never saw
+      if (room.currentMovie.id !== votedOn) return;
+
+      const members = { ...(room.members || {}) };
+      const me = members[memberId];
+      if (!me) return;
+      if (me.vote && me.voteFor === votedOn) return; // already voted on this one
+
+      members[memberId] = { ...me, vote, voteFor: votedOn };
       const values = Object.values(members);
-      const allNotSeen = values.length > 0 && values.every(m => m.vote === 'not_seen');
-      if (!allNotSeen) return;
-      tx.update(roomRef(roomCode), { phase: 'winner' });
+      const votedOnThis = m => m.vote && m.voteFor === votedOn;
+
+      const update = {
+        [`members.${memberId}.vote`]: vote,
+        [`members.${memberId}.voteFor`]: votedOn,
+      };
+
+      if (values.some(m => votedOnThis(m) && m.vote === 'seen')) {
+        update.phase = 'picking';
+        shouldPick = true;
+      } else if (values.length && values.every(m => votedOnThis(m) && m.vote === 'not_seen')) {
+        update.phase = 'winner';
+      }
+
+      tx.update(ref, update);
     });
   } catch (e) {
     console.error(e);
   }
+
+  if (shouldPick) await pickAndRevealMovie();
 }
 
 async function playAgain() {
@@ -450,6 +488,7 @@ async function playAgain() {
   Object.keys(members).forEach(id => {
     resets[`members.${id}.allIn`] = false;
     resets[`members.${id}.vote`] = null;
+    resets[`members.${id}.voteFor`] = null;
   });
   await updateDoc(roomRef(roomCode), {
     phase: 'lobby',

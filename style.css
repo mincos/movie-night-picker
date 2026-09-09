@@ -200,6 +200,45 @@ input[type="text"]::placeholder {
   color: var(--gold);
 }
 
+/* ---- Persistent room code (picking screens) ---- */
+
+.room-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 9px;
+  padding: 9px 16px;
+  background: rgba(16, 19, 26, 0.9);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+
+.room-bar[hidden] { display: none; }
+
+.room-bar-label,
+.room-bar-hint {
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: rgba(243, 236, 221, 0.45);
+}
+
+.room-bar-code {
+  font-family: 'Fraunces', serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--gold);
+}
+
+/* make room for the bar only when it's actually up */
+body.with-room-bar #app { padding-top: 50px; }
+
 /* ---- Genre picker ---- */
 
 .stage-title {
@@ -312,6 +351,29 @@ input[type="text"]::placeholder {
   display: block;
 }
 
+/* ---- Picking loader ---- */
+
+.spinner {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 3px solid rgba(227, 174, 76, 0.2);
+  border-top-color: var(--gold);
+  animation: spin 0.85s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.picking-text {
+  margin: 18px 0 0;
+  color: rgba(243, 236, 221, 0.7);
+  font-size: 0.95rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; border-top-color: rgba(227, 174, 76, 0.2); }
+}
+
 /* ---- Movie card / reveal ---- */
 
 .eyebrow-hint {
@@ -396,6 +458,34 @@ input[type="text"]::placeholder {
   z-index: 50;
 }
 
+#view-winner .poster-wrap {
+  position: relative;
+  width: 52%;
+  max-width: 190px;
+  margin: 18px auto 0;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+#view-winner .movie-info {
+  padding: 16px 20px 20px;
+  text-align: center;
+}
+
+#view-winner .movie-title { font-size: 1.35rem; }
+#view-winner .movie-meta { margin-bottom: 10px; }
+
+#view-winner .movie-overview {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
 #view-winner .eyebrow-hint {
   font-family: 'Fraunces', serif;
   font-size: 1.15rem;
@@ -426,8 +516,8 @@ input[type="text"]::placeholder {
 
 .winner-badge {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 8px;
+  left: 8px;
   z-index: 2;
   background: var(--gold);
   color: var(--navy-deep);
@@ -505,4 +595,11 @@ input[type="text"]::placeholder {
   #view-reveal .movie-title { font-size: 1.15rem; }
   #view-reveal .movie-overview { -webkit-line-clamp: 2; line-clamp: 2; }
   #view-reveal .hint { margin-top: 10px; }
+
+  body.with-room-bar #app { padding-top: 46px; }
+  #view-winner .eyebrow-hint { margin-bottom: 10px; }
+  #view-winner .poster-wrap { width: 44%; max-width: 150px; margin-top: 14px; }
+  #view-winner .movie-info { padding: 12px 16px 16px; }
+  #view-winner .movie-title { font-size: 1.2rem; }
+  #view-winner .movie-overview { -webkit-line-clamp: 2; line-clamp: 2; }
 }
