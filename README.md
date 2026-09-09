@@ -23,6 +23,22 @@ Room state syncs live via Firestore, so everyone in the room sees the same thing
 4. Copy the `firebaseConfig` object it gives you.
 5. Paste those values into `firebase-config.js` in this repo, replacing the placeholders.
 
+**Auto-cleanup (TTL)** — rooms carry an `expiresAt` timestamp set 1 hour ahead, refreshed
+whenever a movie is revealed or a new round starts. Firestore deletes expired rooms for you
+once you enable a TTL policy on that field (one-time, and nothing is deleted until you do):
+
+Firebase Console > **Firestore Database** > **Time-to-live (TTL)** tab > **Create policy**,
+with collection group `rooms` and timestamp field `expiresAt`. Or via the CLI:
+
+```
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=rooms --enable-ttl --project=<your-project-id>
+```
+
+Firestore deletes expired documents within roughly 24 hours of their expiry, so rooms linger a
+while after the hour is up rather than vanishing exactly on time. Rooms created before you turn
+this on have no `expiresAt` and will never be swept — delete those by hand.
+
 **Firestore rules** — since there's no login, use rules that just scope access to the `rooms` collection:
 
 ```

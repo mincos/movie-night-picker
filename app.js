@@ -3,7 +3,7 @@ import { celebrate } from './confetti.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot,
-  runTransaction, serverTimestamp, deleteField, arrayUnion
+  runTransaction, serverTimestamp, deleteField, arrayUnion, Timestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 const app = initializeApp(firebaseConfig);
@@ -16,6 +16,12 @@ if (!memberId) {
   memberId = 'm_' + Math.random().toString(36).slice(2, 10);
   localStorage.setItem(MEMBER_KEY, memberId);
 }
+
+// Rooms self-destruct via a Firestore TTL policy on `expiresAt`.
+// The stamp slides forward on activity so a long night is never cut short.
+const ROOM_TTL_HOURS = 1;
+const roomExpiry = () =>
+  Timestamp.fromMillis(Date.now() + ROOM_TTL_HOURS * 60 * 60 * 1000);
 
 let roomCode = null;
 let memberName = null;
@@ -218,6 +224,7 @@ async function createRoom() {
 
   await setDoc(roomRef(code), {
     createdAt: serverTimestamp(),
+    expiresAt: roomExpiry(),
     phase: 'lobby',
     currentMovie: null,
     excludedMovieIds: [],
@@ -409,6 +416,7 @@ async function pickAndRevealMovie() {
 
     await updateDoc(roomRef(roomCode), {
       phase: 'reveal',
+      expiresAt: roomExpiry(),
       currentMovie: movie,
       excludedMovieIds: arrayUnion(movie.id),
       ...resetVotes
@@ -492,6 +500,7 @@ async function playAgain() {
   });
   await updateDoc(roomRef(roomCode), {
     phase: 'lobby',
+    expiresAt: roomExpiry(),
     currentMovie: null,
     ...resets
   });
