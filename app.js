@@ -3,7 +3,7 @@ import { celebrate } from './confetti.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot,
-  runTransaction, serverTimestamp, deleteField, arrayUnion, Timestamp
+  runTransaction, serverTimestamp, deleteField, deleteDoc, arrayUnion, Timestamp
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 const app = initializeApp(firebaseConfig);
@@ -11,8 +11,6 @@ const db = getFirestore(app);
 
 // ---------- local identity ----------
 const MEMBER_KEY = 'reelpick_member_id';
-const ROOM_KEY = 'reelpick_room';
-const NAME_KEY = 'reelpick_name';
 let memberId = localStorage.getItem(MEMBER_KEY);
 if (!memberId) {
   memberId = 'm_' + Math.random().toString(36).slice(2, 10);
@@ -47,6 +45,7 @@ const presentMembers = room => presentEntries(room).map(([, m]) => m);
 
 let roomCode = null;
 let memberName = null;
+let closingRoom = false;
 let unsubscribe = null;
 let lastPhase = null;
 let shownMovieId = null;
@@ -342,67 +341,20 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) sendHeartbeat(); // back on screen: re-announce at once
 });
 
-function rememberSession(code, name) {
-  try {
-    localStorage.setItem(ROOM_KEY, code);
-    if (name) localStorage.setItem(NAME_KEY, name);
-  } catch (e) { /* private mode — resume just won't work */ }
-}
-
-function forgetSession() {
-  try { localStorage.removeItem(ROOM_KEY); } catch (e) { /* ignore */ }
-}
-
-// iOS discards backgrounded pages, and reopening the tab would otherwise dump
-// you on the start screen instead of the room you were in.
-async function resumeSession() {
-  let code = null;
-  let savedName = null;
-  try {
-    code = localStorage.getItem(ROOM_KEY);
-    savedName = localStorage.getItem(NAME_KEY);
-  } catch (e) {
-    return;
-  }
-  if (savedName) el.name.value = savedName;
-  if (!code) return;
-
-  try {
-    const snap = await getDoc(roomRef(code));
-    if (!snap.exists()) return forgetSession(); // expired or swept by the TTL
-    const room = snap.data();
-    memberName = savedName || 'Guest';
-
-    // gone long enough to have fallen out of the members map — rejoin rather
-    // than render a room we aren't in
-    if (!(room.members || {})[memberId]) {
-      await updateDoc(roomRef(code), {
-        [`members.${memberId}`]: { name: memberName, allIn: false, vote: null, voteFor: null,
-          joinedAt: Date.now(), lastSeen: Date.now() }
-      });
-    }
-    enterRoom(code);
-  } catch (e) {
-    console.error(e);
-    forgetSession();
-  }
-}
-
 function enterRoom(code) {
   roomCode = code;
-  rememberSession(code, memberName);
   el.landingError.textContent = '';
   el.lobbyCode.textContent = code;
   if (unsubscribe) unsubscribe();
   unsubscribe = onSnapshot(roomRef(code), (snap) => {
     if (!snap.exists()) {
-      // the room expired while we had it open
-      forgetSession();
+      // deliberately closed via "Pick again", or swept by the TTL
       if (unsubscribe) unsubscribe();
       unsubscribe = null;
       roomCode = null;
       showView('landing');
-      showLandingError('That room has expired.');
+      showLandingError(closingRoom ? '' : 'That room has closed.');
+      closingRoom = false;
       return;
     }
     renderRoom(snap.data());
@@ -683,22 +635,18 @@ async function settleReveal() {
   if (shouldPick) await pickAndRevealMovie();
 }
 
+// The night is over once a movie is picked, so this closes the room outright
+// rather than recycling it. A new night means a new room and a new code.
 async function playAgain() {
-  const snap = await getDoc(roomRef(roomCode));
-  const room = snap.data();
-  const members = room.members || {};
-  const resets = {};
-  Object.keys(members).forEach(id => {
-    resets[`members.${id}.allIn`] = false;
-    resets[`members.${id}.vote`] = null;
-    resets[`members.${id}.voteFor`] = null;
-  });
-  await updateDoc(roomRef(roomCode), {
-    phase: 'lobby',
-    expiresAt: roomExpiry(),
-    currentMovie: null,
-    ...resets
-  });
+  if (!roomCode) return showView('landing');
+  closingRoom = true;
+  try {
+    await deleteDoc(roomRef(roomCode));
+  } catch (e) {
+    console.error(e);
+    closingRoom = false;
+    throw e;
+  }
 }
 
 // ---------- wire up events ----------
@@ -729,7 +677,12 @@ el.btnJoin.addEventListener('click', () => joinRoom().catch(e => showLandingErro
 el.btnAllIn.addEventListener('click', () => markAllIn().catch(e => (el.lobbyError.textContent = e.message)));
 el.btnSeen.addEventListener('click', () => castVote('seen'));
 el.btnNotSeen.addEventListener('click', () => castVote('not_seen'));
-el.btnPlayAgain.addEventListener('click', () => playAgain());
+el.btnPlayAgain.addEventListener('click', () => {
+  el.btnPlayAgain.disabled = true;
+  playAgain()
+    .catch(e => showLandingError(e.message))
+    .finally(() => { el.btnPlayAgain.disabled = false; });
+});
 
 // allow Enter key to submit
 el.name.addEventListener('keydown', (e) => {
@@ -741,4 +694,3 @@ el.code.addEventListener('keydown', (e) => {
 });
 
 buildGenreGrid();
-resumeSession();
