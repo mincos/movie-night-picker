@@ -589,23 +589,50 @@ body.with-room-bar #app { padding-top: 50px; }
 /* Short viewports: trim further rather than pushing the buttons down */
 @media (max-height: 780px) {
   #app { padding: 20px 20px 28px; }
+
+  /* Phones: size the poster off viewport height so the card grows to fill the
+     screen instead of floating in dead space, which also buys synopsis lines. */
   #view-reveal .eyebrow-hint { margin-bottom: 10px; }
-  #view-reveal .poster-wrap { width: 40%; max-width: 132px; margin-top: 12px; }
+  #view-reveal .poster-wrap {
+    width: auto;
+    max-width: none;
+    height: clamp(170px, 34dvh, 270px);
+    margin-top: 12px;
+  }
   #view-reveal .movie-info { padding: 12px 16px 16px; }
   #view-reveal .movie-title { font-size: 1.15rem; }
-  #view-reveal .movie-overview { -webkit-line-clamp: 3; line-clamp: 3; }
+  #view-reveal .movie-overview { -webkit-line-clamp: 4; line-clamp: 4; }
   #view-reveal .hint { margin-top: 10px; }
 
   body.with-room-bar #app { padding-top: 46px; }
   #view-winner .eyebrow-hint { margin-bottom: 10px; }
-  #view-winner .poster-wrap { width: 44%; max-width: 150px; margin-top: 14px; }
+  #view-winner .poster-wrap {
+    width: auto;
+    max-width: none;
+    height: clamp(180px, 37dvh, 292px);
+    margin-top: 14px;
+  }
   #view-winner .movie-info { padding: 12px 16px 16px; }
   #view-winner .movie-title { font-size: 1.2rem; }
+  #view-winner .movie-overview { -webkit-line-clamp: 4; line-clamp: 4; }
+}
+
+/* Tall phones: spend the extra height on another synopsis line */
+@media (min-height: 701px) and (max-height: 780px) {
+  #view-reveal .movie-overview,
+  #view-winner .movie-overview { -webkit-line-clamp: 5; line-clamp: 5; }
+}
+
+/* Small phones: give a line back so the taller poster still fits */
+@media (max-height: 650px) {
+  #view-reveal .movie-overview,
   #view-winner .movie-overview { -webkit-line-clamp: 3; line-clamp: 3; }
 }
 
-/* Very short screens (small phones): keep the tightest synopsis */
+/* Very small phones (SE-sized): tightest text and a smaller poster */
 @media (max-height: 600px) {
+  #view-reveal .poster-wrap { height: clamp(140px, 30dvh, 200px); }
+  #view-winner .poster-wrap { height: clamp(150px, 33dvh, 215px); }
   #view-reveal .movie-overview,
   #view-winner .movie-overview { -webkit-line-clamp: 2; line-clamp: 2; }
 }
