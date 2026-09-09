@@ -290,6 +290,9 @@ async function sendHeartbeat() {
   try {
     await updateDoc(roomRef(roomCode), {
       [`members.${memberId}.lastSeen`]: Date.now(),
+      // a room with a live heartbeat isn't abandoned, so keep it off the TTL
+      // sweep even if nobody has picked a new movie for an hour
+      expiresAt: roomExpiry(),
     });
   } catch (e) {
     console.error(e);
